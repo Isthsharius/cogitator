@@ -1,0 +1,10 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Id": "org.cogitator.litany",
+        "Name": "Литания",
+        "Description": "Круговой монитор системных ресурсов",
+        "Icon": "utilities-system-monitor"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

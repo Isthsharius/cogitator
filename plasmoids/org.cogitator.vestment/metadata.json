@@ -1,0 +1,10 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Id": "org.cogitator.vestment",
+        "Name": "Облачение",
+        "Description": "Переключение тем Кузня Марса и Скрапкод",
+        "Icon": "preferences-desktop-theme"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
