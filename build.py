@@ -13,8 +13,9 @@ import cursors
 import emblem
 import icons
 import plasmatheme
+import wallpaper
 
-OUT = Path("/var/tmp/cogitator-theme")
+OUT = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "cogitator-theme/build"
 WALL_SRC = Path(os.environ.get("COGITATOR_WALLPAPER", Path(__file__).parent / "wallpaper.png"))
 SIZE = "2560x1440"
 
@@ -209,6 +210,17 @@ def theme_vars(key: str, t: dict) -> str:
 
 
 FISH = {
+    "__cog_changeicons": r"""function __cog_changeicons --description 'Применить значки: путь к утилите зависит от дистрибутива'
+    for tool in /usr/lib/plasma-changeicons /usr/libexec/plasma-changeicons /usr/lib64/libexec/plasma-changeicons /usr/lib/*/libexec/plasma-changeicons
+        if test -x $tool
+            $tool $argv
+            return
+        end
+    end
+    kwriteconfig6 --file kdeglobals --group Icons --key Theme $argv[1]
+    echo 'plasma-changeicons не найден: значки применятся после перезахода в сессию' >&2
+end
+""",
     "__cog_load": r"""function __cog_load --description 'Загрузить параметры текущей темы'
     set -l t forge
     test -r ~/.config/cogitator/current; and read t < ~/.config/cogitator/current
@@ -243,13 +255,13 @@ end
     __cog_confirm 'Вернуть прежний вид системы?'; or return 1
     read -l scheme < $pre/colorscheme
     plasma-apply-colorscheme $scheme
-    test -f $pre/icontheme; and read icons < $pre/icontheme; and /usr/lib/plasma-changeicons $icons
+    test -f $pre/icontheme; and read icons < $pre/icontheme; and __cog_changeicons $icons
     test -f $pre/cursor; and read cursor < $pre/cursor; and plasma-apply-cursortheme $cursor
     test -f $pre/plasmatheme; and read ptheme < $pre/plasmatheme; and plasma-apply-desktoptheme $ptheme
     python3 ~/.local/share/cogitator/apps.py revert
     systemctl --user disable --now cogitator-herald.service
     command rm -f ~/.config/systemd/user/cogitator-herald.service
-    sudo rm -f /etc/sudoers.d/cogitator
+    test -f $pre/sudoers-skipped; or sudo rm -f /etc/sudoers.d/cogitator
     command rm -rf ~/.config/fastfetch
     test -f $pre/neofetch.conf; and command cp $pre/neofetch.conf ~/.config/neofetch/config.conf
     command rm -f ~/.local/share/locale/ru/LC_MESSAGES/kscreenlocker_greet.mo
@@ -267,9 +279,9 @@ end
     end
     kwriteconfig6 --file kdeglobals --group WM --key activeFont --delete
     systemctl --user stop plasma-plasmashell.service
-    command cp $pre/plasma-org.kde.plasma.desktop-appletsrc ~/.config/
+    test -f $pre/plasma-org.kde.plasma.desktop-appletsrc; and command cp $pre/plasma-org.kde.plasma.desktop-appletsrc ~/.config/
     systemctl --user start plasma-plasmashell.service
-    sed -i '/\.config\/cogitator\/ghostty-current/d' ~/.config/ghostty/config
+    test -f ~/.config/ghostty/config; and sed -i '/\.config\/cogitator\/ghostty-current/d' ~/.config/ghostty/config
     pkill -USR2 -x ghostty
     test -f $pre/btop-created; and command rm -f ~/.config/btop/btop.conf
     command rm -f ~/.config/btop/themes/cogitator-forge.theme ~/.config/btop/themes/cogitator-scrapcode.theme
@@ -294,6 +306,10 @@ end
 end
 """,
     "обряд": r"""function обряд --description 'Обновить систему'
+    if not command -q pacman
+        echo 'Команда работает только в Arch-подобных системах' >&2
+        return 1
+    end
     __cog_load
     set_color $cog_c_path; echo ':: Обряд Обновления начат'; set_color normal
     sudo pacman -Syu $argv
@@ -333,6 +349,10 @@ end
 end
 """,
     "очищение": r"""function очищение --description 'Почистить кэш пакетов и ненужные пакеты'
+    if not command -q pacman
+        echo 'Команда работает только в Arch-подобных системах' >&2
+        return 1
+    end
     echo ':: Устаревшие версии в кэше (останутся 2 последние):'
     paccache -dk2
     if __cog_confirm 'Удалить их?'
@@ -380,7 +400,7 @@ end
 
     __cog_run plasma-apply-colorscheme $cog_scheme
     __cog_run plasma-apply-wallpaperimage $cog_wall
-    __cog_run /usr/lib/plasma-changeicons $cog_scheme
+    __cog_run __cog_changeicons $cog_scheme
     __cog_run plasma-apply-cursortheme {$cog_scheme}Cursor
     __cog_run plasma-apply-desktoptheme cogitator
     __cog_run cp ~/.config/cogitator/fastfetch/logo-$t.jsonc ~/.config/fastfetch/config.jsonc
@@ -453,7 +473,8 @@ mkdir -p ~/.local/share/color-schemes ~/.local/share/fonts/cogitator ~/.local/sh
 if not test -f $pre/colorscheme
     mkdir -p $pre
     kreadconfig6 --file kdeglobals --group General --key ColorScheme > $pre/colorscheme
-    command cp ~/.config/plasma-org.kde.plasma.desktop-appletsrc $pre/
+    set -q COGITATOR_SUDOERS; or touch $pre/sudoers-skipped
+    test -f ~/.config/plasma-org.kde.plasma.desktop-appletsrc; and command cp ~/.config/plasma-org.kde.plasma.desktop-appletsrc $pre/
     if not test -f ~/.config/btop/btop.conf
         touch $pre/btop-created
     end
@@ -484,7 +505,7 @@ for d in $src/cursors/*
 end
 rm -rf ~/.local/share/plasma/desktoptheme/cogitator
 cp -r $src/desktoptheme/cogitator ~/.local/share/plasma/desktoptheme/
-cp $src/locale/kscreenlocker_greet.mo ~/.local/share/locale/ru/LC_MESSAGES/
+test -f $src/locale/kscreenlocker_greet.mo; and cp $src/locale/kscreenlocker_greet.mo ~/.local/share/locale/ru/LC_MESSAGES/
 cp $src/cogitator-herald.service ~/.config/systemd/user/
 for d in $src/aurorae/*
     rm -rf ~/.local/share/aurorae/themes/(basename $d)
@@ -502,10 +523,14 @@ mkdir -p ~/.config/fastfetch
 if test -f ~/.config/neofetch/config.conf
     sed -i "s|^image_source=.*|image_source=\"$HOME/.local/share/cogitator/sigil-neofetch.txt\"|" ~/.config/neofetch/config.conf
 end
-if visudo -cf $src/sudoers-cogitator >/dev/null
-    sudo install -o root -g root -m 0440 $src/sudoers-cogitator /etc/sudoers.d/cogitator
-else
-    echo 'Файл sudoers не прошёл проверку, пропущен' >&2
+# Необязательная шутка про неверный пароль: без явного согласия sudoers не трогаем
+if set -q COGITATOR_SUDOERS
+    if visudo -cf $src/sudoers-cogitator >/dev/null
+        sudo install -o root -g root -m 0440 $src/sudoers-cogitator /etc/sudoers.d/cogitator
+        and command rm -f $pre/sudoers-skipped
+    else
+        echo 'Файл sudoers не прошёл проверку, пропущен' >&2
+    end
 end
 cp $src/wallpapers/* ~/.local/share/cogitator/wallpapers/
 cp $src/shaders/* ~/.config/cogitator/shaders/
@@ -526,6 +551,7 @@ cp ~/.config/cogitator/ghostty/$cur ~/.config/cogitator/ghostty-current
 cp ~/.config/cogitator/fastfetch/logo-$cur.jsonc ~/.config/fastfetch/config.jsonc
 echo $cur > ~/.config/cogitator/current
 python3 ~/.local/share/cogitator/apps.py apply $cur
+touch ~/.config/ghostty/config
 if not grep -q cogitator/ghostty-current ~/.config/ghostty/config
     printf '\nconfig-file = %s/.config/cogitator/ghostty-current\n' $HOME >> ~/.config/ghostty/config
 end
@@ -562,12 +588,16 @@ WantedBy=graphical-session.target
 
 
 def main() -> None:
-    if not WALL_SRC.is_file():
-        sys.exit(f"Нет обоев: {WALL_SRC}. Укажите картинку в COGITATOR_WALLPAPER.")
     if OUT.exists():
         shutil.rmtree(OUT)
     OUT.mkdir(parents=True)
     (OUT / "wallpapers").mkdir()
+    wall = WALL_SRC
+    if not wall.is_file():
+        if "COGITATOR_WALLPAPER" in os.environ:
+            sys.exit(f"Нет обоев: {wall}")
+        wall = OUT / "wallpaper-generated.png"
+        wallpaper.render(*(int(v) for v in SIZE.split("x"))).save(wall)
     for key, t in THEMES.items():
         w(f"color-schemes/{t['scheme']}.colors", colors(t))
         w(f"ghostty/{key}", ghostty(t, key))
@@ -578,7 +608,7 @@ def main() -> None:
             "modules": FASTFETCH_MODULES}, indent=2) + "\n")
         w(f"btop/cogitator-{key}.theme", btop(t))
         w(f"themes/{key}.fish", theme_vars(key, t))
-        cmd = ["magick", str(WALL_SRC), "-filter", "Lanczos", "-resize", SIZE + "^",
+        cmd = ["magick", str(wall), "-filter", "Lanczos", "-resize", SIZE + "^",
                "-gravity", "center", "-extent", SIZE]
         if t["modulate"]:
             cmd += ["-modulate", t["modulate"]]
@@ -603,12 +633,13 @@ def main() -> None:
     w("sudoers-cogitator", 'Defaults badpass_message="Подпись отвергнута"\n')
     w("cogitator-herald.service", HERALD_UNIT)
     w("locale/.keep", "")
-    po = subprocess.run(["msgunfmt", "/usr/share/locale/ru/LC_MESSAGES/kscreenlocker_greet.mo"],
-                        capture_output=True, text=True, check=True).stdout
-    assert 'msgstr "Ошибка разблокировки"' in po
-    subprocess.run(["msgfmt", "-o", str(OUT / "locale/kscreenlocker_greet.mo"), "-"],
-                   input=po.replace('msgstr "Ошибка разблокировки"', 'msgstr "Подпись отвергнута"'),
-                   text=True, check=True)
+    locker = Path("/usr/share/locale/ru/LC_MESSAGES/kscreenlocker_greet.mo")
+    if locker.is_file() and shutil.which("msgunfmt"):
+        po = subprocess.run(["msgunfmt", str(locker)], capture_output=True, text=True, check=True).stdout
+        if 'msgstr "Ошибка разблокировки"' in po:
+            subprocess.run(["msgfmt", "-o", str(OUT / "locale/kscreenlocker_greet.mo"), "-"],
+                           input=po.replace('msgstr "Ошибка разблокировки"', 'msgstr "Подпись отвергнута"'),
+                           text=True, check=True)
     shutil.copytree(Path(__file__).parent / "plasmoids", OUT / "plasmoids")
     shutil.copytree(Path(__file__).parent / "fonts", OUT / "fonts")
     w("install.fish", INSTALL)

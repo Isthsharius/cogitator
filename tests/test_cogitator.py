@@ -1,14 +1,21 @@
 """Тесты логики темы. Запуск из src: python3 -m unittest discover -s tests."""
 import sys
+import tempfile
 import tomllib
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from PIL import ImageStat
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
 import apps
+import boot
+import build
 import doctor
 import herald
+import wallpaper
 
 FORGE = {
     "title": "Кузня", "scheme": "CogitatorForge", "bg": "#0B0806", "panel": "#15100C", "panel2": "#211712",
@@ -116,6 +123,46 @@ class DoctorTests(unittest.TestCase):
     def test_exit_code_fail_only(self):
         self.assertEqual(doctor.summarize([("a", doctor.WARN, "x")]), 0)
         self.assertEqual(doctor.summarize([("a", doctor.FAIL, "x")]), 1)
+
+
+class PortabilityTests(unittest.TestCase):
+    def supply(self, root, name, kind, scope=None):
+        d = root / name
+        d.mkdir()
+        (d / "type").write_text(kind + "\n")
+        if scope:
+            (d / "scope").write_text(scope + "\n")
+
+    def test_power_paths_use_real_names_and_skip_mouse_battery(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.supply(root, "hidpp_battery_0", "Battery", "Device")
+            self.supply(root, "BAT1", "Battery")
+            self.supply(root, "ACAD", "Mains")
+            bat, ac = herald.power_paths(root)
+            self.assertEqual(bat, root / "BAT1")
+            self.assertEqual(ac, root / "ACAD/online")
+
+    def test_power_paths_on_desktop_read_as_absent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bat, ac = herald.power_paths(Path(tmp))
+            self.assertIsNone(herald.read(bat / "capacity"))
+            self.assertIsNone(herald.read(ac))
+
+    def test_build_is_not_in_shared_tmp_and_fonts_ship_with_repo(self):
+        self.assertFalse(str(build.OUT).startswith("/var/tmp"))
+        self.assertTrue(boot.FONT.is_file())
+        self.assertEqual(boot.FONT.parent, ROOT / "fonts")
+
+    def test_generated_wallpaper_is_dark_full_size_and_repeatable(self):
+        first = wallpaper.render(320, 180)
+        self.assertEqual(first.size, (320, 180))
+        self.assertEqual(first.tobytes(), wallpaper.render(320, 180).tobytes())
+        self.assertLess(ImageStat.Stat(first.convert("L")).mean[0], 70)
+
+    def test_widget_does_not_assume_adapter_name(self):
+        qml = (ROOT / "plasmoids/org.cogitator.litany/contents/ui/main.qml").read_text(encoding="utf8")
+        self.assertNotIn("ADP1", qml)
 
 
 if __name__ == "__main__":

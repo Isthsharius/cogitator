@@ -10,10 +10,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-BAT = Path("/sys/class/power_supply/BAT0")
-AC = Path("/sys/class/power_supply/ADP1/online")
+POWER_ROOT = Path("/sys/class/power_supply")
 BAT_LOW = 15
-GPU_HOT = 87  # nvidia-smi: GPU Target Temperature Specification этой карты
+GPU_HOT = 87  # nvidia-smi: GPU Target Temperature Specification типичной карты
 GPU_COOL = GPU_HOT - 8
 START_GRACE = 10.0
 BATCH_WINDOW = 1.5
@@ -24,6 +23,19 @@ CPU_MARGIN = 5  # предупреждать за столько градусо�
 CPU_LIMIT_DEFAULT = 100
 COOL_DELTA = 8
 OFFLINE_TICKS = 2  # столько опросов подряд без сети: короткие сбои не показывать
+
+
+def power_paths(root: Path = POWER_ROOT) -> tuple[Path, Path]:
+    """Батарея ноутбука и датчик сети; у мыши и наушников scope=Device, их не считаем."""
+    battery = root / "absent-battery"
+    mains = root / "absent-mains"
+    for item in sorted(root.glob("*")):
+        kind = read(item / "type")
+        if kind == "Battery" and read(item / "scope") != "Device" and battery.name == "absent-battery":
+            battery = item
+        elif kind == "Mains" and mains.name == "absent-mains":
+            mains = item
+    return battery, mains / "online"
 
 
 def notify(title: str, body: str = "", urgency: str = "normal") -> None:
@@ -218,7 +230,8 @@ def write_state(path: Path, level: str, text: str) -> None:
 
 
 def watch_power() -> None:
-    vigil = Vigil(read(AC))
+    bat, ac = power_paths()
+    vigil = Vigil(read(ac))
     path = state_path()
     tick = 0
     gpu = None
@@ -226,10 +239,10 @@ def watch_power() -> None:
         if tick % GPU_EVERY == 0:
             gpu = gpu_temperature()
         tick += 1
-        cap = read(BAT / "capacity")
+        cap = read(bat / "capacity")
         cpu, limit = cpu_reading()
-        readings = Readings(ac=read(AC), capacity=int(cap) if cap and cap.isdigit() else None,
-                            discharging=read(BAT / "status") == "Discharging", cpu=cpu, cpu_limit=limit,
+        readings = Readings(ac=read(ac), capacity=int(cap) if cap and cap.isdigit() else None,
+                            discharging=read(bat / "status") == "Discharging", cpu=cpu, cpu_limit=limit,
                             gpu=gpu, network=network_state())
         for title, body, urgency in vigil.update(readings):
             notify(title, body, urgency)
