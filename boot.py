@@ -9,7 +9,7 @@ import emblem
 
 SIZE = 440
 PAD = 50  # запас под свечение
-FONT = Path.home() / ".local/share/cogitator-theme/fonts/Handjet[ELGR,ELSH,wght].ttf"
+FONT = Path(__file__).resolve().parent / "fonts/Handjet[ELGR,ELSH,wght].ttf"
 BG = "#0A0705"
 ACCENT, BRASS, TEXT = "#E0281E", "#C08A3E", "#E6CFA3"
 BOOT_LINES = ["Пробуждение духа машины", "Нанесение святых масел", "Литания запуска когитатора",

@@ -22,7 +22,7 @@ PlasmoidItem {
     preferredRepresentation: fullRepresentation
     Plasmoid.backgroundHints: "NoBackground"
 
-    readonly property string readCmd: "cat $HOME/.config/cogitator/current /sys/class/power_supply/ADP1/online; cat $XDG_RUNTIME_DIR/cogitator/state 2>/dev/null"
+    readonly property string readCmd: "cat $HOME/.config/cogitator/current; m=$(grep -lx Mains /sys/class/power_supply/*/type 2>/dev/null | head -n1); cat \"${m%type}online\" 2>/dev/null || echo 1; cat $XDG_RUNTIME_DIR/cogitator/state 2>/dev/null"
     P5Support.DataSource {
         id: shell
         engine: "executable"

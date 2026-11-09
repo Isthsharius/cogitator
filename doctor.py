@@ -15,7 +15,8 @@ import apps
 HOME = Path.home()
 STATE = HOME / ".config/cogitator/doctor.json"
 CURRENT = HOME / ".config/cogitator/current"
-QML_ROOT = Path("/usr/lib/qt6/qml")
+QML_ROOTS = [Path("/usr/lib/qt6/qml"), Path("/usr/lib64/qt6/qml"), Path("/usr/lib/x86_64-linux-gnu/qt6/qml")]
+QML_ROOT = next((p for p in QML_ROOTS if p.is_dir()), QML_ROOTS[0])
 QML_MODULES = ["org/kde/plasma/plasmoid", "org/kde/plasma/plasma5support", "org/kde/ksysguard/sensors"]
 PLASMOIDS = ["org.cogitator.litany", "org.cogitator.vestment"]
 ERROR_WORDS = ("error", "is not installed", "is not a type", "cannot ", "failed to load")
